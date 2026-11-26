@@ -1,0 +1,166 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#151126"><title>Winner AI · Practice</title><style>
+*{box-sizing:border-box}body{margin:0;background:#151126;color:#f5f1ff;font:16px -apple-system,BlinkMacSystemFont,system-ui,sans-serif;min-height:100dvh}main{max-width:480px;margin:auto;padding:24px 18px calc(32px + env(safe-area-inset-bottom))}.top{display:flex;align-items:center;justify-content:space-between}.logo{background:#a78bfa;color:#20143c;width:48px;height:48px;display:grid;place-items:center;border-radius:16px;font-size:26px}.tag{font-size:11px;letter-spacing:1.5px;color:#bcb1d4}h1{font-size:36px;letter-spacing:-1.5px;margin:22px 0 4px}p{line-height:1.5;color:#bcb1d4;font-size:14px}.card{border:1px solid #3c3055;background:#211a36;border-radius:20px;padding:18px;margin-top:16px}label{display:block;font-size:13px;color:#c8bbde;margin:10px 0 5px}button,input,textarea{font:inherit;border-radius:12px}button{border:0;background:#a78bfa;color:#1d1236;font-weight:750;min-height:48px;padding:12px 16px;cursor:pointer}button:disabled{opacity:.5}button.alt{background:#34294a;color:white}input,textarea{width:100%;background:#161125;color:white;border:1px solid #4b3e62;padding:13px;outline:none}textarea{resize:vertical;min-height:74px}.row{display:flex;align-items:center;gap:10px;justify-content:space-between}.tabs{display:flex;gap:8px}.tabs button{flex:1}.full{width:100%;margin-top:12px}.opts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:16px 0}.opts button{min-height:72px;color:white;background:#c63357;overflow-wrap:anywhere}.opts button:nth-child(2){background:#265abf}.opts button:nth-child(3){background:#8b650c}.opts button:nth-child(4){background:#20734e}.opts button.hint{outline:3px solid #74f5ab;outline-offset:2px}.opts button.wrong{outline:3px solid #ff7989}.answer{color:#91f3b7;font-size:22px;font-weight:700;overflow-wrap:anywhere}.progress{height:6px;background:#3b3152;border-radius:9px;overflow:hidden}.progress div{height:100%;background:#a78bfa;transition:width .2s}small{color:#bcb1d4;line-height:1.5}a{color:#cbb7ff}.switch{width:auto;accent-color:#a78bfa;min-width:22px;min-height:22px}h2{font-size:23px;line-height:1.25} [hidden]{display:none!important}
+</style></head><body><main><div class="top"><div class="logo">✦</div></div><h1>Winner AI</h1><p>Подсказки к вопросам с экрана ведущего</p><div class="tabs"><button id="liveTab">Камера</button><button id="demoTab" class="alt">Тренировка</button><button id="aiTab" class="alt">Свои вопросы</button></div><section class="card" id="demo" hidden><div class="row"><span class="tag" id="counter">ДЕМО / 5 ВОПРОСОВ</span><b id="score">0 баллов</b></div><div class="progress"><div id="bar" style="width:0%"></div></div><h2 id="q">Готов к тренировке?</h2><div class="card" style="margin:0;padding:12px"><small id="phase">Встроенная база · без интернета</small><div class="answer" id="hint">—</div></div><div class="opts" id="options"></div><label class="row">Автоответ в демо <input type="checkbox" class="switch" id="auto"></label><button class="full" id="next">Начать</button><p id="result" role="status" aria-live="polite"></p></section><section class="card" id="ai" hidden><h2>Решить свой вопрос</h2><p id="status">Проверка сервера…</p><label for="password">Пароль приложения (не ключ Gemini)</label><input id="password" type="password" autocomplete="off"><label for="question">Вопрос</label><textarea id="question" placeholder="Введи вопрос"></textarea><label for="choices">Варианты (каждый с новой строки, необязательно)</label><textarea id="choices" placeholder="Первый вариант&#10;Второй вариант"></textarea><button class="full" id="solve">Спросить Gemini</button><p class="answer" id="aiResult" role="status"></p><small>Вопрос отправляется на сервер и в Google. ИИ может ошибаться.</small></section><section class="card" id="live">
+<h2>Вопрос с экрана</h2>
+<p>Наведи заднюю камеру на экран ведущего и держи вопрос и варианты в кадре. Для игры и камеры одновременно нужен второй экран.</p>
+<label for="livePassword">Пароль приложения</label>
+<input id="livePassword" type="password" autocomplete="off">
+<button id="camera" class="full">Включить автоанализ</button>
+<video id="preview" playsinline muted hidden style="width:100%;margin-top:12px;border-radius:12px"></video>
+<label for="photo">Или выбери скриншот</label>
+<input id="photo" type="file" accept="image/*">
+<p id="liveStatus" role="status"></p>
+<p id="seenQuestion"></p>
+<div id="liveAnswer" class="answer" aria-live="polite"></div>
+<p>Кадры отправляются через сервер в Gemini. Проверяй подсказку по тексту текущего вопроса.</p>
+<a href="https://kahoot.it/">Войти в игру на kahoot.it</a>
+</section></main><script>
+const $=id=>document.getElementById(id);const quiz=[{q:'Столица Казахстана?',c:['Алматы','Астана','Тараз','Шымкент'],a:1},{q:'Какая планета самая большая?',c:['Марс','Венера','Юпитер','Земля'],a:2},{q:'Сколько будет 12 × 8?',c:['96','86','108','92'],a:0},{q:'Қазақстанның мемлекеттік тілі?',c:['Ағылшын','Неміс','Француз','Қазақ'],a:3},{q:'What is the largest ocean?',c:['Atlantic','Pacific','Indian','Arctic'],a:1}];let i=-1,score=0,stage='idle',timers=[],token=0;function clear(){timers.forEach(clearTimeout);timers=[];token++}function later(fn,ms){const t=token;timers.push(setTimeout(()=>{if(t===token)fn()},ms))}function updateScore(){$('score').textContent=score+' баллов'}function select(n){if(stage!=='choices')return;stage='answered';const a=quiz[i].a;const btns=[...$('options').children];btns.forEach((b,j)=>{b.disabled=true;if(j===a)b.classList.add('hint');if(j===n&&n!==a)b.classList.add('wrong')});if(n===a)score+=1000;updateScore();$('result').textContent=n===a?'Верно! +1000 баллов':'Правильный ответ: '+quiz[i].c[a];$('next').disabled=false;$('next').textContent=i===quiz.length-1?'Результат':'Далее'}function next(){if(stage==='preview'||stage==='choices')return;if(stage==='done'){i=-1;score=0;updateScore()}clear();i++;$('options').replaceChildren();$('result').textContent='';if(i===quiz.length){stage='done';$('q').textContent='Тренировка завершена';$('counter').textContent='ГОТОВО';$('bar').style.width='100%';$('hint').textContent=score+' / '+quiz.length*1000;$('phase').textContent='Итог';$('next').textContent='Заново';return}const x=quiz[i];stage='preview';$('counter').textContent='ВОПРОС '+(i+1)+' / '+quiz.length;$('bar').style.width=100*i/quiz.length+'%';$('q').textContent=x.q;$('hint').textContent='Анализ…';$('phase').textContent='Демо: варианты через 5 секунд';$('next').disabled=true;$('next').textContent='Ожидание';later(()=>{$('hint').textContent=x.c[x.a];$('phase').textContent='Ответ из встроенной базы (не Gemini)'},700);later(()=>{stage='choices';$('phase').textContent='Варианты появились';x.c.forEach((s,j)=>{const b=document.createElement('button');b.textContent=['▲','◆','●','■'][j]+' '+s;if(j===x.a)b.classList.add('hint');b.onclick=()=>select(j);$('options').append(b)});if($('auto').checked)select(x.a)},5000)}$('next').onclick=next;$('auto').onchange=()=>{if($('auto').checked&&stage==='choices')select(quiz[i].a)};fetch('/api/status').then(r=>r.json()).then(s=>{$('status').textContent=s.configured?'Сервер настроен. Введи пароль.':'Gemini не настроен на сервере.'}).catch(()=>{$('status').textContent='Локальная демо-версия: сервер Gemini недоступен.'});$('solve').onclick=async()=>{const question=$('question').value.trim(),choices=$('choices').value.split('\n').map(x=>x.trim()).filter(Boolean);if(!question){$('aiResult').textContent='Введи вопрос';return}$('solve').disabled=true;$('aiResult').textContent='Gemini анализирует…';try{const r=await fetch('/api/solve',{method:'POST',headers:{'Content-Type':'application/json','x-app-password':$('password').value},body:JSON.stringify({question,choices})});const a=await r.json();if(!r.ok)throw Error(a.error);$('aiResult').textContent=(a.index>=0?'Вариант '+(a.index+1)+': ':'')+a.answer}catch(e){$('aiResult').textContent=e.message||'Ошибка подключения'}finally{$('solve').disabled=false}};
+
+const preview = $('preview');
+const canvas = document.createElement('canvas');
+const sample = document.createElement('canvas');
+sample.width = 40;
+sample.height = 24;
+const pixels = sample.getContext('2d', {willReadFrequently: true});
+let stream, timer, activeRequest, lastFrame;
+let session = 0, lastScan = 0;
+function showStatus(message) { $('liveStatus').textContent = message; }
+function clearAnswer() {
+  $('seenQuestion').textContent = '';
+  $('liveAnswer').textContent = '';
+}
+function stop() {
+  session++;
+  clearTimeout(timer);
+  activeRequest?.abort();
+  stream?.getTracks().forEach(track => track.stop());
+  stream = undefined;
+  preview.srcObject = null;
+  preview.hidden = true;
+  lastFrame = undefined;
+  $('camera').textContent = 'Включить автоанализ';
+}
+for (const mode of ['live', 'demo', 'ai']) {
+  $(mode + 'Tab').onclick = () => {
+    if (mode !== 'live') stop();
+    for (const name of ['live', 'demo', 'ai']) {
+      $(name).hidden = name !== mode;
+      $(name + 'Tab').classList.toggle('alt', name !== mode);
+    }
+  };
+}
+function draw(source, width, height) {
+  const scale = Math.min(1, 1280 / Math.max(width, height));
+  canvas.width = Math.max(1, Math.round(width * scale));
+  canvas.height = Math.max(1, Math.round(height * scale));
+  canvas.getContext('2d').drawImage(source, 0, 0, canvas.width, canvas.height);
+}
+function fingerprint() {
+  pixels.drawImage(canvas, 0, 0, sample.width, sample.height);
+  return pixels.getImageData(0, 0, sample.width, sample.height).data;
+}
+function changed(a, b) {
+  if (!b) return true;
+  let count = 0;
+  for (let i = 0; i < a.length; i += 4) {
+    if (Math.abs(a[i] - b[i]) + Math.abs(a[i+1] - b[i+1]) + Math.abs(a[i+2] - b[i+2]) > 75) count++;
+  }
+  return count > sample.width * sample.height * 0.045;
+}
+async function solveImage(current) {
+  clearAnswer();
+  showStatus('Gemini читает вопрос…');
+  const request = new AbortController();
+  activeRequest = request;
+  let image = canvas.toDataURL('image/jpeg', 0.78).split(',')[1];
+  if (image.length > 510000) image = canvas.toDataURL('image/jpeg', 0.48).split(',')[1];
+  try {
+    const response = await fetch('/api/vision', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json','x-app-password':$('livePassword').value},
+      body: JSON.stringify({image}),
+      signal: request.signal
+    });
+    const result = await response.json();
+    if (!response.ok) throw Error(result.error);
+    if (current !== session) return;
+    if (stream && preview.videoWidth) {
+      draw(preview, preview.videoWidth, preview.videoHeight);
+      if (changed(fingerprint(), lastFrame)) {
+        lastFrame = undefined;
+        showStatus('Кадр изменился. Читаю следующий вопрос…');
+        return;
+      }
+    }
+    $('seenQuestion').textContent = result.question;
+    $('liveAnswer').textContent = result.answer;
+    showStatus(result.answer ? 'Подсказка Gemini' : 'Вопрос пока не распознан');
+  } catch (error) {
+    if (current === session) showStatus(error.message || 'Ошибка подключения');
+  } finally {
+    if (activeRequest === request) activeRequest = undefined;
+  }
+}
+async function tick(current) {
+  if (!stream || current !== session) return;
+  if (preview.videoWidth) {
+    draw(preview, preview.videoWidth, preview.videoHeight);
+    const frame = fingerprint();
+    if (changed(frame, lastFrame) || Date.now() - lastScan > 7000) {
+      lastFrame = frame;
+      lastScan = Date.now();
+      await solveImage(current);
+    }
+  }
+  if (current === session) timer = setTimeout(() => tick(current), 850);
+}
+$('camera').onclick = async () => {
+  if (stream) { stop(); showStatus('Камера остановлена'); return; }
+  if (!$('livePassword').value) { showStatus('Введи пароль приложения'); return; }
+  if (!navigator.mediaDevices?.getUserMedia) { showStatus('Открой сайт по HTTPS в Safari'); return; }
+  stop();
+  clearAnswer();
+  const current = session;
+  $('camera').disabled = true;
+  try {
+    const camera = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280}},audio:false});
+    if (current !== session) { camera.getTracks().forEach(track => track.stop()); return; }
+    stream = camera;
+    preview.srcObject = stream;
+    preview.hidden = false;
+    await preview.play();
+    if (current !== session) return;
+    $('camera').textContent = 'Остановить камеру';
+    showStatus('Наведи камеру на вопрос и варианты');
+    tick(current);
+  } catch {
+    if (current === session) { stop(); showStatus('Разреши доступ к камере в Safari'); }
+  } finally {
+    $('camera').disabled = false;
+  }
+};
+$('photo').onchange = async () => {
+  const file = $('photo').files[0];
+  $('photo').value = '';
+  if (!file) return;
+  if (!$('livePassword').value) { showStatus('Введи пароль приложения'); return; }
+  stop();
+  clearAnswer();
+  const current = session;
+  const url = URL.createObjectURL(file);
+  try {
+    const image = new Image();
+    image.src = url;
+    await image.decode();
+    if (current !== session) return;
+    draw(image, image.naturalWidth, image.naturalHeight);
+    await solveImage(current);
+  } catch {
+    if (current === session) showStatus('Не удалось открыть изображение');
+  } finally { URL.revokeObjectURL(url); }
+};
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && stream) { stop(); showStatus('Камера остановлена при выходе из вкладки'); }
+});
+</script></body></html>
